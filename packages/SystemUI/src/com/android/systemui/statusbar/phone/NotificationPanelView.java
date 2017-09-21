@@ -23,16 +23,24 @@ import android.animation.ValueAnimator;
 import android.app.ActivityManager;
 import android.app.Fragment;
 import android.app.StatusBarManager;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
+import android.database.ContentObserver;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.PowerManager;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.FloatProperty;
 import android.util.MathUtils;
+import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
@@ -53,12 +61,14 @@ import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.FragmentHostManager.FragmentListener;
 import com.android.systemui.plugins.qs.QS;
+import com.android.systemui.settings.SettingConfirmationHelper;
 import com.android.systemui.statusbar.ExpandableNotificationRow;
 import com.android.systemui.statusbar.ExpandableView;
 import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.GestureRecorder;
 import com.android.systemui.statusbar.KeyguardAffordanceView;
 import com.android.systemui.statusbar.NotificationData;
+import com.android.systemui.statusbar.SettingConfirmationSnackbarViewCreator;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
@@ -230,12 +240,29 @@ public class NotificationPanelView extends PanelView implements
     private boolean mNoVisibleNotifications = true;
     private ValueAnimator mDarkAnimator;
 
+    private Handler mHandler = new Handler();
+    private SettingsObserver mSettingsObserver;
+
+    private boolean mDoubleTapToSleepEnabled;
+    private int mStatusBarHeaderHeight;
+    private GestureDetector mDoubleTapGesture;
+
     public NotificationPanelView(Context context, AttributeSet attrs) {
         super(context, attrs);
         setWillNotDraw(!DEBUG);
         mFalsingManager = FalsingManager.getInstance(context);
         mQsOverscrollExpansionEnabled =
                 getResources().getBoolean(R.bool.config_enableQuickSettingsOverscrollExpansion);
+        mSettingsObserver = new SettingsObserver(mHandler);
+        mDoubleTapGesture = new GestureDetector(mContext, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDoubleTap(MotionEvent e) {
+                PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+                if (pm != null)
+                    pm.goToSleep(e.getEventTime());
+                return true;
+            }
+        });
     }
 
     public void setStatusBar(StatusBar bar) {
@@ -269,12 +296,14 @@ public class NotificationPanelView extends PanelView implements
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         FragmentHostManager.get(this).addTagListener(QS.TAG, mFragmentListener);
+        mSettingsObserver.observe();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         FragmentHostManager.get(this).removeTagListener(QS.TAG, mFragmentListener);
+        mSettingsObserver.unobserve();
     }
 
     @Override
@@ -298,6 +327,7 @@ public class NotificationPanelView extends PanelView implements
                 R.dimen.max_notification_fadeout_height);
         mIndicationBottomPadding = getResources().getDimensionPixelSize(
                 R.dimen.keyguard_indication_bottom_padding);
+        mStatusBarHeaderHeight = getResources().getDimensionPixelSize(R.dimen.status_bar_header_height);
     }
 
     public void updateResources() {
@@ -638,7 +668,7 @@ public class NotificationPanelView extends PanelView implements
                 mInitialTouchX = x;
                 initVelocityTracker();
                 trackMovement(event);
-                if (shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, 0)) {
+                if (shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, 0, true, false)) {
                     getParent().requestDisallowInterceptTouchEvent(true);
                 }
                 if (mQsExpansionAnimator != null) {
@@ -674,7 +704,8 @@ public class NotificationPanelView extends PanelView implements
                     return true;
                 }
                 if (Math.abs(h) > mTouchSlop && Math.abs(h) > Math.abs(x - mInitialTouchX)
-                        && shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, h)) {
+                        && shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, h,
+                                true, false)) {
                     mQsTracking = true;
                     onQsExpansionStarted();
                     notifyExpandingFinished();
@@ -773,6 +804,11 @@ public class NotificationPanelView extends PanelView implements
         if (mBlockTouches || (mQs != null && mQs.isCustomizing())) {
             return false;
         }
+        if (mDoubleTapToSleepEnabled
+                && mStatusBarState == StatusBarState.KEYGUARD
+                && event.getY() < mStatusBarHeaderHeight) {
+            mDoubleTapGesture.onTouchEvent(event);
+        }
         initDownStates(event);
         if (mListenForHeadsUp && !mHeadsUpTouchHelper.isTrackingHeadsUp()
                 && mHeadsUpTouchHelper.onInterceptTouchEvent(event)) {
@@ -834,8 +870,35 @@ public class NotificationPanelView extends PanelView implements
                 && mQsExpansionEnabled) {
             mTwoFingerQsExpandPossible = true;
         }
-        if (mTwoFingerQsExpandPossible && isOpenQsEvent(event)
-                && event.getY(event.getActionIndex()) < mStatusBarMinHeight) {
+        boolean twoFingerQsEvent = mTwoFingerQsExpandPossible && isOpenQsEvent(event);
+        boolean oneFingerQsOverride = action == MotionEvent.ACTION_DOWN
+                && shouldQuickSettingsIntercept(event.getX(), event.getY(), -1, false, true);
+        if ((twoFingerQsEvent || oneFingerQsOverride)
+                && event.getY(event.getActionIndex()) < mStatusBarMinHeight
+                && mExpandedHeight <= mQsPeekHeight) {
+            if (oneFingerQsOverride) {
+                final SettingConfirmationSnackbarViewCreator
+                        mSnackbarViewCreator = new
+                        SettingConfirmationSnackbarViewCreator(mContext);
+                SettingConfirmationHelper.prompt(
+                        mSnackbarViewCreator.getSnackbarView(),
+                        Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
+                        true,
+                        getContext().getString(R.string.quick_settings_quick_pull_down_name),
+                        getContext().getString(R.string.quick_settings_quick_pull_down),
+                        new SettingConfirmationHelper.OnSettingChoiceListener() {
+                            @Override
+                            public void onSettingConfirm(final String settingName) {
+                            }
+
+                            @Override
+                            public void onSettingDeny(final String settingName) {
+                                closeQs();
+                            }
+                        },
+                        null);
+            }
+
             MetricsLogger.count(mContext, COUNTER_PANEL_OPEN_QS, 1);
             mQsExpandImmediate = true;
             requestPanelHeightUpdate();
@@ -874,7 +937,7 @@ public class NotificationPanelView extends PanelView implements
 
     private void handleQsDown(MotionEvent event) {
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN
-                && shouldQuickSettingsIntercept(event.getX(), event.getY(), -1)) {
+                && shouldQuickSettingsIntercept(event.getX(), event.getY(), -1, true, false)) {
             mFalsingManager.onQsDown();
             mQsTracking = true;
             onQsExpansionStarted();
@@ -1412,18 +1475,28 @@ public class NotificationPanelView extends PanelView implements
     /**
      * @return Whether we should intercept a gesture to open Quick Settings.
      */
-    private boolean shouldQuickSettingsIntercept(float x, float y, float yDiff) {
-        if (!mQsExpansionEnabled || mCollapsedOnDown) {
+    private boolean shouldQuickSettingsIntercept(float x, float y, float yDiff, boolean useHeader,
+            boolean notSetFallback) {
+        if (!mQsExpansionEnabled || (useHeader && mCollapsedOnDown)) {
             return false;
         }
         View header = mKeyguardShowing ? mKeyguardStatusBar : mQs.getHeader();
-        final boolean onHeader = x >= mQsFrame.getX()
+        final boolean onHeader = useHeader && x >= mQsFrame.getX()
                 && x <= mQsFrame.getX() + mQsFrame.getWidth()
                 && y >= header.getTop() && y <= header.getBottom();
+
+        final float w = getMeasuredWidth();
+        float region = (w * (1.f/4.f)); // TODO overlay region fraction?
+        final boolean showQsOverride = (isLayoutRtl() ? (x < region) : (w - region < x))
+            && !mKeyguardShowing && SettingConfirmationHelper.get(
+                    getContext().getContentResolver(),
+                    Settings.Secure.QUICK_SETTINGS_QUICK_PULL_DOWN,
+                    notSetFallback);
+
         if (mQsExpanded) {
             return onHeader || (yDiff < 0 && isInQsArea(x, y));
         } else {
-            return onHeader;
+            return onHeader || showQsOverride;
         }
     }
 
@@ -2463,6 +2536,40 @@ public class NotificationPanelView extends PanelView implements
         mGroupManager = groupManager;
     }
 
+    class SettingsObserver extends ContentObserver {
+        SettingsObserver(Handler handler) {
+            super(handler);
+        }
+
+        void observe() {
+            ContentResolver resolver = mContext.getContentResolver();
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.DOUBLE_TAP_SLEEP_GESTURE), false, this, UserHandle.USER_ALL);
+            update();
+        }
+
+        void unobserve() {
+            ContentResolver resolver = mContext.getContentResolver();
+            resolver.unregisterContentObserver(this);
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            update();
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            update();
+        }
+
+        public void update() {
+            ContentResolver resolver = mContext.getContentResolver();
+            mDoubleTapToSleepEnabled = Settings.System.getIntForUser(resolver,
+                    Settings.System.DOUBLE_TAP_SLEEP_GESTURE, 0, UserHandle.USER_CURRENT) == 1;
+        }
+    }
+	
     public boolean hideStatusBarIconsWhenExpanded() {
         return !isFullWidth() || !mShowIconsWhenExpanded;
     }

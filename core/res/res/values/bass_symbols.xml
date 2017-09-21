@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+** Copyright (C) 2017 CypherOS
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**     http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+*/
+-->
+<resources>
+
+    <!-- PlatLogo -->
+    <java-symbol type="drawable" name="platlogo_bass" />
+  
+    <!-- Package Manager -->
+    <java-symbol type="array" name="config_disabledComponents" />
+    <java-symbol type="array" name="config_forceEnabledComponents" />
+  
+    <!-- Pocket Lock -->
+    <java-symbol type="layout" name="pocket_lock_view_layout" />
+    <java-symbol type="id" name="pocket_hint_container" />
+    <java-symbol type="id" name="pocket_hint_image" />
+    <java-symbol type="id" name="pocket_hint_message" />
+
+    <!-- Pocket bridge -->
+    <java-symbol type="string" name="config_pocketBridgeSysfsInpocket" />
+
+    <!-- Button Brightness -->
+    <java-symbol type="integer" name="config_buttonBrightnessSettingMinimum" />
+    <java-symbol type="integer" name="config_buttonBrightnessSettingMaximum" />
+    <java-symbol type="integer" name="config_buttonBrightnessSettingDefault" />
+
+    <!-- Whether notify fingerprint client of successful cancelled authentication -->
+    <java-symbol type="bool" name="config_notifyClientOnFingerprintCancelSuccess" />
+
+    <!-- Input policy constants  -->
+    <java-symbol type="integer" name="config_deviceHardwareKeys" />
+    <java-symbol type="integer" name="config_doubleTapOnHomeKeyBehavior" />
+    <java-symbol type="integer" name="config_doubleTapOnMenuKeyBehavior" />
+    <java-symbol type="integer" name="config_doubleTapOnBackKeyBehavior" />
+    <java-symbol type="integer" name="config_doubleTapOnAssistKeyBehavior" />
+    <java-symbol type="integer" name="config_doubleTapOnAppSwitchKeyBehavior" />
+    <java-symbol type="integer" name="config_doubleTapOnCameraKeyBehavior" />
+    <java-symbol type="integer" name="config_longPressOnHomeKeyBehavior" />
+    <java-symbol type="integer" name="config_longPressOnMenuKeyBehavior" />
+    <java-symbol type="integer" name="config_longPressOnBackKeyBehavior" />
+    <java-symbol type="integer" name="config_longPressOnAssistKeyBehavior" />
+    <java-symbol type="integer" name="config_longPressOnAppSwitchKeyBehavior" />
+    <java-symbol type="integer" name="config_longPressOnCameraKeyBehavior" />
+
+    <!-- Internal default to navigation bar value -->
+    <java-symbol type="bool" name="config_defaultToNavigationBar" />
+
+    <!-- Default value to enable/disable Doze "Always On" feature -->
+    <java-symbol type="bool" name="config_dozeAlwaysOn" />
+</resources>

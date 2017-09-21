@@ -191,6 +191,16 @@ public class Build {
          * The user-visible version string.  E.g., "1.0" or "3.4b5".
          */
         public static final String RELEASE = getString("ro.build.version.release");
+      
+        /**
+         * The user-visible bass version from the settings menu.
+         */
+        public static final String BASS_API = getString("ro.bass.api");
+
+        /**
+         * The user-visible bass version from the settings menu.
+         */
+        public static final String BASS_VERSION = getString("ro.bass.version");
 
         /**
          * The base OS build the product is based on.

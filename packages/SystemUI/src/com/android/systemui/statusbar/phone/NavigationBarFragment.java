@@ -128,6 +128,9 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
 
     public boolean mHomeBlockedThisTouch;
 
+    // Enable swapped naviagtion keys.
+    protected boolean mUseSwapKey = false;
+
     // ----- Fragment Lifecycle Callbacks -----
 
     @Override
@@ -382,22 +385,24 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
         mNavigationBarView.notifyScreenOn(screenOn);
     }
 
-    private void prepareNavigationBarView() {
+    public void prepareNavigationBarView() {
+        mNavigationBarView.setSwapKeys(mUseSwapKey);
         mNavigationBarView.reorient();
 
         ButtonDispatcher recentsButton = mNavigationBarView.getRecentsButton();
-        recentsButton.setOnClickListener(this::onRecentsClick);
-        recentsButton.setOnTouchListener(this::onRecentsTouch);
-        recentsButton.setLongClickable(true);
-        recentsButton.setOnLongClickListener(this::onLongPressBackRecents);
+        recentsButton.setLongClickable(false);
+        //recentsButton.setOnClickListener(this::onRecentsClick);
+        //recentsButton.setOnTouchListener(this::onRecentsTouch);
+        //recentsButton.setOnLongClickListener(this::onLongPressBackRecents);
 
         ButtonDispatcher backButton = mNavigationBarView.getBackButton();
-        backButton.setLongClickable(true);
-        backButton.setOnLongClickListener(this::onLongPressBackRecents);
+        backButton.setLongClickable(false);
+        //backButton.setOnLongClickListener(this::onLongPressBackRecents);
 
         ButtonDispatcher homeButton = mNavigationBarView.getHomeButton();
-        homeButton.setOnTouchListener(this::onHomeTouch);
-        homeButton.setOnLongClickListener(this::onHomeLongClick);
+        homeButton.setLongClickable(false);
+        //homeButton.setOnTouchListener(this::onHomeTouch);
+        //homeButton.setOnLongClickListener(this::onHomeLongClick);
 
         ButtonDispatcher accessibilityButton = mNavigationBarView.getAccessibilityButton();
         accessibilityButton.setOnClickListener(this::onAccessibilityClick);
